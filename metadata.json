@@ -1,0 +1,6 @@
+{
+  "name": "TELO MAX Pro",
+  "description": "Do'kon sotuvlari, ombor, qarzlar va hisobotlar boshqaruvi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
