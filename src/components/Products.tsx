@@ -200,20 +200,49 @@ export default function Products({ products, categories, storeId, sellerName, on
         store_id: storeId
       };
 
-      let { error: saleErr } = await supabase.from('sales').insert(salePayload);
+      let currentPayload = { ...salePayload };
+      let saleErr: any = null;
+      let success = false;
 
-      // Agar 'orig_price' ustuni ma'lumotlar bazasida yo'qligi sababli xato bersa, uni olib tashlab qaytadan urinib ko'ramiz
-      if (saleErr && (
-        saleErr.message?.includes('orig_price') || 
-        saleErr.details?.includes('orig_price') || 
-        saleErr.message?.includes('schema cache')
-      )) {
-        const { orig_price, ...fallbackPayload } = salePayload;
-        const fallbackRes = await supabase.from('sales').insert(fallbackPayload);
-        saleErr = fallbackRes.error;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const res = await supabase.from('sales').insert(currentPayload);
+        if (!res.error) {
+          success = true;
+          break;
+        }
+
+        saleErr = res.error;
+        const errMsg = saleErr.message || '';
+        const errDetails = saleErr.details || '';
+
+        // Extract missing column from error message or details
+        const match = errMsg.match(/Could not find the '([^']+)' column/i) || 
+                      errMsg.match(/column "([^"]+)"/i) ||
+                      errDetails.match(/column "([^"]+)"/i);
+
+        if (match && match[1]) {
+          const missingCol = match[1];
+          delete currentPayload[missingCol];
+          console.warn(`Removing missing column from payload: ${missingCol}`);
+        } else {
+          // Fallback if regex match fails but there's a column/schema issue
+          if (errMsg.includes('schema cache') || errMsg.includes('column')) {
+            if ('orig_price' in currentPayload) {
+              delete currentPayload.orig_price;
+              console.warn('Removing orig_price as fallback');
+              continue;
+            }
+            if ('sale_type' in currentPayload) {
+              delete currentPayload.sale_type;
+              console.warn('Removing sale_type as fallback');
+              continue;
+            }
+          }
+          break;
+        }
       }
 
-      if (saleErr) throw saleErr;
+      if (!success && saleErr) throw saleErr;
 
       // 3. If "nasiya" (debt), insert debt record
       if (saleType === 'nasiya') {
